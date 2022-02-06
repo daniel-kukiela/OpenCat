@@ -151,7 +151,9 @@ void meow(int repeat = 0, int pause = 200, int startF = 50,  int endF = 200, int
 #define T_CALIBRATE 'c'
 #define T_REST      'd'
 #define T_GYRO      'g'
-#define T_PRINT_GYRO'V' //verbose print Gyro data
+#define T_PRINT_SENSORS 'V' //verbose print Sensor data
+#define T_IMU       'y'
+#define T_SENSORS   'z'
 #define T_HELP      'h'
 #define T_INDEXED   'i'
 #define T_JOINTS    'j'
@@ -418,7 +420,8 @@ byte newCmdIdx = 0;
 byte hold = 0;
 int8_t offsetLR = 0;
 bool checkGyro = true;
-bool printGyro = false;
+bool checkIMU = false;
+bool printSensors = false;
 int8_t skipGyro = 2;
 
 #define COUNT_DOWN 60
@@ -1064,6 +1067,14 @@ template <typename T> void printList(T * arr, byte len = DOF) {
     //PT('\t');
   }
   PTL(temp);
+}
+template <typename T> void printFloatList(T * arr, byte len = DOF) {
+  for (byte i = 0; i < len; i++) {
+    // Sting(float()) adds about 5% to the program size for some reason and this solution does not.
+    PT(float(arr[i]));
+    PT(",\t");
+  }
+  PTL();
 }
 template <typename T> void printEEPROMList(int EEaddress, byte len = DOF) {
   for (byte i = 0; i < len; i++) {

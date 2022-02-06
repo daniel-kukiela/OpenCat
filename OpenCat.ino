@@ -44,9 +44,12 @@
 bool overflow = false;
 float ypr[3];         // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 float yprPrev[3];
+float acc[3];         // [x, y, z]
+float accPrev[3];
 
 MPU6050 mpu;
 #define OUTPUT_READABLE_YAWPITCHROLL
+#define OUTPUT_READABLE_REALACCEL
 // MPU control/status vars
 //bool dmpReady = false;  // set true if DMP init was successful
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
@@ -58,6 +61,9 @@ uint8_t fifoBuffer[PACKET_SIZE]; // FIFO storage buffer
 // orientation/motion vars
 Quaternion q;           // [w, x, y, z]         quaternion container
 VectorFloat gravity;    // [x, y, z]            gravity vector
+VectorInt16 aa;         // [x, y, z]            accelerometer vector
+VectorInt16 aaReal;     // [x, y, z]            gravity free accelerometer vector
+//VectorInt16 aaWorld;    // [x, y, z]            world-frame accelerometer vector
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -180,7 +186,7 @@ void getFIFO() {//get FIFO only without further processing
   fifoCount -= packetSize;
 }
 
-void getYPR() {//get YPR angles from FIFO data, takes time
+void getYPRAcc(bool accRead = true) {//get YPR angles and acceleration from FIFO data, takes time
   // wait for MPU interrupt or extra packet(s) available
   //while (!mpuInterrupt && fifoCount < packetSize) ;
   if (mpuInterrupt || fifoCount >= packetSize)
@@ -229,27 +235,59 @@ void getYPR() {//get YPR angles from FIFO data, takes time
       for (byte g = 0; g < 3; g++) //use g = 1 to skip yaw if it's not used
         ypr[g] *= degPerRad;        //ypr converted to degree
 
-      // if overflow is detected (after the ypr is read), use previous ypr
+#ifdef OUTPUT_READABLE_REALACCEL
+#ifndef OUTPUT_READABLE_YAWPITCHROLL
+      mpu.dmpGetGravity(&gravity, &q);
+#endif
+      if (accRead) {
+        mpu.dmpGetAccel(&aa, fifoBuffer);
+        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+        acc[0] = aaReal.x;
+        acc[1] = aaReal.y;
+        acc[2] = aaReal.z;
+      }
+      //mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+#endif
+
+      // overflow is detected after the ypr is read. it's necessary to keep a lag record of previous reading.  -- RzLi --
 #ifdef FIX_OVERFLOW
       if (overflow) {
-        for (byte g = 0; g < 3; g++)
+        for (byte g = 0; g < 3; g++) {
           ypr[g] = yprPrev[g];
+          if (accRead)
+            acc[g] = accPrev[g];
+        }
       }
       else {
-        for (byte g = 0; g < 3; g++)
+        for (byte g = 0; g < 3; g++) {
           yprPrev[g] = ypr[g];
+          if (accRead)
+            accPrev[g] = acc[g];
+        }
       }
 #endif
-      if (printGyro) {
+      if (printSensors) {
         PT("yaw, pitch, roll:\t");
         PT(ypr[0]);
         PTF("\t");
         PT(ypr[1]);
         PTF("\t");
         PTL(ypr[2]);
+        if (accRead) {
+          PT("linear acceleration:\t");
+          PT(acc[0]);
+          PTF("\t");
+          PT(acc[1]);
+          PTF("\t");
+          PTL(acc[2]);
+        }
       }
     }
   }
+}
+
+void getYPR(){//get YPR angles from FIFO data, takes time
+  getYPRAcc(false);
 }
 
 void checkBodyMotion()  {
@@ -480,8 +518,8 @@ void loop() {
     // MPU block
     {
 #ifdef GYRO //if opt out the gyro, the calculation can be really fast
-      if (checkGyro) {
-        if (!(timer % skipGyro)) {
+      if (checkGyro || checkIMU) {
+        if (checkGyro && !(timer % skipGyro)) {
           checkBodyMotion();
         }
         else if (mpuInterrupt || fifoCount >= packetSize)
@@ -501,6 +539,8 @@ void loop() {
     if (newCmdIdx) {
       if (token == T_GYRO && !checkGyro)//if checkGyro is false, the gyro will be turned on
         PTL("G");
+      else if (token == T_IMU && !checkIMU)//if checkIMU is false, the IMU will be turned on
+        PTL("Y");
       else if (token == T_PAUSE && tStep)//if checkGyro is false, the gyro will be turned on
         PTL("P");
       else
@@ -527,9 +567,23 @@ void loop() {
             token = T_SKILL;
             break;
           }
-        case T_PRINT_GYRO: {
-            printGyro = !printGyro;
+        case T_PRINT_SENSORS: {
+            printSensors = !printSensors;
             token = T_SKILL;
+            break;
+          }
+        case T_IMU: {
+            checkIMU = !checkIMU;
+            if (checkIMU){
+              getYPRAcc();
+            }
+            token = T_SKILL;
+            break;
+          }
+        case T_SENSORS: { //show the list of current sensors
+            getYPRAcc();
+            printFloatList(ypr, 3);
+            printList(acc, 3);
             break;
           }
         case T_PAUSE: {
