@@ -41,10 +41,9 @@
 // and the reading will be unpredictable. it should be replaced with previous reading to avoid jumping
 #define FIX_OVERFLOW
 //#endif
-#define HISTORY 2
-int8_t lag = 0;
+bool overflow = false;
 float ypr[3];         // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float yprLag[HISTORY][3];
+float yprPrev[3];
 
 MPU6050 mpu;
 #define OUTPUT_READABLE_YAWPITCHROLL
@@ -204,13 +203,16 @@ void getYPR() {//get YPR angles from FIFO data, takes time
 #ifdef DEVELOPER
       PTLF("reset FIFO!");//FIFO overflow! Using last reading!
 #endif
-      lag = (lag - 1 + HISTORY) % HISTORY;
+      overflow = true;
 #endif
       // --
     }
     else if (mpuIntStatus & 0x02) {
       // wait for correct available data length, should be a VERY short wait
       getFIFO();
+#ifdef FIX_OVERFLOW
+      overflow = false;
+#endif
 
 #ifdef OUTPUT_READABLE_YAWPITCHROLL
       // display Euler angles in degrees
@@ -227,13 +229,16 @@ void getYPR() {//get YPR angles from FIFO data, takes time
       for (byte g = 0; g < 3; g++) //use g = 1 to skip yaw if it's not used
         ypr[g] *= degPerRad;        //ypr converted to degree
 
-      // overflow is detected after the ypr is read. it's necessary to keep a lag record of previous reading.  -- RzLi --
+      // if overflow is detected (after the ypr is read), use previous ypr
 #ifdef FIX_OVERFLOW
-      for (byte g = 0; g < 3; g++) {//use g = 1 to skip yaw if it's not used
-        yprLag[lag][g] = ypr[g];
-        ypr[g] = yprLag[(lag - 1 + HISTORY) % HISTORY][g] ;
+      if (overflow) {
+        for (byte g = 0; g < 3; g++)
+          ypr[g] = yprPrev[g];
       }
-      lag = (lag + 1) % HISTORY;
+      else {
+        for (byte g = 0; g < 3; g++)
+          yprPrev[g] = ypr[g];
+      }
 #endif
       if (printGyro) {
         PT("yaw, pitch, roll:\t");
