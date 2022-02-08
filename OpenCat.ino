@@ -39,13 +39,9 @@
 
 //#if OVERFLOW_THRESHOLD>1024-1024%PACKET_SIZE-1   // when using (1024-1024%PACKET_SIZE) as the overflow resetThreshold, the packet buffer may be broken
 // and the reading will be unpredictable. it should be replaced with previous reading to avoid jumping
-#define FIX_OVERFLOW
 //#endif
-bool overflow = false;
 float ypr[3];         // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float yprPrev[3];
 float acc[3];         // [x, y, z]
-float accPrev[3];
 
 MPU6050 mpu;
 #define OUTPUT_READABLE_YAWPITCHROLL
@@ -204,21 +200,13 @@ void getYPRAcc(bool accRead = true) {//get YPR angles and acceleration from FIFO
       mpu.resetFIFO();
       // otherwise, check for DMP data ready interrupt (this should happen frequently)
 
-      // -- RzLi --
-#ifdef FIX_OVERFLOW
 #ifdef DEVELOPER
       PTLF("reset FIFO!");//FIFO overflow! Using last reading!
 #endif
-      overflow = true;
-#endif
-      // --
     }
     else if (mpuIntStatus & 0x02) {
       // wait for correct available data length, should be a VERY short wait
       getFIFO();
-#ifdef FIX_OVERFLOW
-      overflow = false;
-#endif
 
 #ifdef OUTPUT_READABLE_YAWPITCHROLL
       // display Euler angles in degrees
@@ -249,21 +237,6 @@ void getYPRAcc(bool accRead = true) {//get YPR angles and acceleration from FIFO
       //mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
 #endif
 
-      // overflow is detected after the ypr is read. it's necessary to keep a lag record of previous reading.  -- RzLi --
-#ifdef FIX_OVERFLOW
-      if (overflow) {
-        for (byte g = 0; g < 3; g++) {
-          ypr[g] = yprPrev[g];
-          if (accRead)
-            acc[g] = accPrev[g];
-        }
-      }
-      else {
-        for (byte g = 0; g < 3; g++) {
-          yprPrev[g] = ypr[g];
-          if (accRead)
-            accPrev[g] = acc[g];
-        }
       }
 #endif
       if (printSensors) {
