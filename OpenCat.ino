@@ -575,6 +575,8 @@ void loop() {
         case T_IMU: {
             checkIMU = !checkIMU;
             if (checkIMU){
+              mpu.resetFIFO();
+              getYPRAcc();
               getYPRAcc();
             }
             token = T_SKILL;
