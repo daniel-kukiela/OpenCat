@@ -595,6 +595,10 @@ void loop() {
 #endif
             break;
           }
+        case T_BATT: {
+            PTL((constrain(voltage, LOW_BATT, HIGH_BATT) - LOW_BATT) * 100 / (HIGH_BATT - LOW_BATT));
+            break;
+          }
         case T_PAUSE: {
             tStep = !tStep;
             if (tStep)
