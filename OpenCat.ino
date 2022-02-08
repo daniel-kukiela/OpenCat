@@ -41,11 +41,13 @@
 // and the reading will be unpredictable. it should be replaced with previous reading to avoid jumping
 //#endif
 float ypr[3];         // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-float acc[3];         // [x, y, z]
+float accReal[3];     // [x, y, z]
+float accWorld[3];    // [x, y, z]
 
 MPU6050 mpu;
 #define OUTPUT_READABLE_YAWPITCHROLL
 #define OUTPUT_READABLE_REALACCEL
+#define OUTPUT_READABLE_WORLDACCEL
 // MPU control/status vars
 //bool dmpReady = false;  // set true if DMP init was successful
 uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
@@ -59,7 +61,7 @@ Quaternion q;           // [w, x, y, z]         quaternion container
 VectorFloat gravity;    // [x, y, z]            gravity vector
 VectorInt16 aa;         // [x, y, z]            accelerometer vector
 VectorInt16 aaReal;     // [x, y, z]            gravity free accelerometer vector
-//VectorInt16 aaWorld;    // [x, y, z]            world-frame accelerometer vector
+VectorInt16 aaWorld;    // [x, y, z]            world-frame accelerometer vector
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -224,21 +226,36 @@ void getYPRAcc(bool accRead = true) {//get YPR angles and acceleration from FIFO
         ypr[g] *= degPerRad;        //ypr converted to degree
 
 #ifdef OUTPUT_READABLE_REALACCEL
-#ifndef OUTPUT_READABLE_YAWPITCHROLL
-      mpu.dmpGetGravity(&gravity, &q);
-#endif
       if (accRead) {
+#ifndef OUTPUT_READABLE_YAWPITCHROLL
+        mpu.dmpGetQuaternion(&q, fifoBuffer);
+        mpu.dmpGetGravity(&gravity, &q);
+#endif
         mpu.dmpGetAccel(&aa, fifoBuffer);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-        acc[0] = aaReal.x;
-        acc[1] = aaReal.y;
-        acc[2] = aaReal.z;
+        accReal[0] = aaReal.x;
+        accReal[1] = aaReal.y;
+        accReal[2] = aaReal.z;
       }
-      //mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
 #endif
 
+#ifdef OUTPUT_READABLE_WORLDACCEL
+      if (accRead) {
+#ifndef OUTPUT_READABLE_YAWPITCHROLL
+        mpu.dmpGetQuaternion(&q, fifoBuffer);
+        mpu.dmpGetGravity(&gravity, &q);
+#endif
+#ifndef OUTPUT_READABLE_REALACCEL
+        mpu.dmpGetAccel(&aa, fifoBuffer);
+        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+#endif
+        mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+        accWorld[0] = aaWorld.x;
+        accWorld[1] = aaWorld.y;
+        accWorld[2] = aaWorld.z;
       }
 #endif
+
       if (printSensors) {
         PT("yaw, pitch, roll:\t");
         PT(ypr[0]);
@@ -247,12 +264,22 @@ void getYPRAcc(bool accRead = true) {//get YPR angles and acceleration from FIFO
         PTF("\t");
         PTL(ypr[2]);
         if (accRead) {
+#ifdef OUTPUT_READABLE_REALACCEL
           PT("linear acceleration:\t");
-          PT(acc[0]);
+          PT(accReal[0]);
           PTF("\t");
-          PT(acc[1]);
+          PT(accReal[1]);
           PTF("\t");
-          PTL(acc[2]);
+          PTL(accReal[2]);
+#endif
+#ifdef OUTPUT_READABLE_WORLDACCEL
+          PT("world acceleration:\t");
+          PT(accWorld[0]);
+          PTF("\t");
+          PT(accWorld[1]);
+          PTF("\t");
+          PTL(accWorld[2]);
+#endif
         }
       }
     }
@@ -555,8 +582,15 @@ void loop() {
           }
         case T_SENSORS: { //show the list of current sensors
             getYPRAcc();
+#ifdef OUTPUT_READABLE_YAWPITCHROLL
             printFloatList(ypr, 3);
-            printList(acc, 3);
+#endif
+#ifdef OUTPUT_READABLE_REALACCEL
+            printList(accReal, 3);
+#endif
+#ifdef OUTPUT_READABLE_WORLDACCEL
+            printList(accWorld, 3);
+#endif
             break;
           }
         case T_PAUSE: {
